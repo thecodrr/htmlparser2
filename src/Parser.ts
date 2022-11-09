@@ -1,7 +1,8 @@
-import Tokenizer, { Callbacks, QuoteType } from "./Tokenizer.js";
+import Tokenizer, { Callbacks } from "./Tokenizer.js";
 import { fromCodePoint } from "entities/lib/decode.js";
+import Attributes from "./Attributes.js";
 
-const formTags = new Set([
+const formTags = [
     "input",
     "option",
     "optgroup",
@@ -9,18 +10,18 @@ const formTags = new Set([
     "button",
     "datalist",
     "textarea",
-]);
-const pTag = new Set(["p"]);
-const tableSectionTags = new Set(["thead", "tbody"]);
-const ddtTags = new Set(["dd", "dt"]);
-const rtpTags = new Set(["rt", "rp"]);
+];
+const pTag = ["p"];
+const tableSectionTags = ["thead", "tbody"];
+const ddtTags = ["dd", "dt"];
+const rtpTags = ["rt", "rp"];
 
-const openImpliesClose = new Map<string, Set<string>>([
-    ["tr", new Set(["tr", "th", "td"])],
-    ["th", new Set(["th"])],
-    ["td", new Set(["thead", "th", "td"])],
-    ["body", new Set(["head", "link", "script"])],
-    ["li", new Set(["li"])],
+const openImpliesClose = new Map<string, string[]>([
+    ["tr", ["tr", "th", "td"]],
+    ["th", ["th"]],
+    ["td", ["thead", "th", "td"]],
+    ["body", ["head", "link", "script"]],
+    ["li", ["li"]],
     ["p", pTag],
     ["h1", pTag],
     ["h2", pTag],
@@ -34,8 +35,8 @@ const openImpliesClose = new Map<string, Set<string>>([
     ["button", formTags],
     ["datalist", formTags],
     ["textarea", formTags],
-    ["option", new Set(["option"])],
-    ["optgroup", new Set(["optgroup", "option"])],
+    ["option", ["option"]],
+    ["optgroup", ["optgroup", "option"]],
     ["dd", ddtTags],
     ["dt", ddtTags],
     ["address", pTag],
@@ -65,7 +66,7 @@ const openImpliesClose = new Map<string, Set<string>>([
     ["tfoot", tableSectionTags],
 ]);
 
-const voidElements = new Set([
+const voidElements = [
     "area",
     "base",
     "basefont",
@@ -85,11 +86,11 @@ const voidElements = new Set([
     "source",
     "track",
     "wbr",
-]);
+];
 
-const foreignContextElements = new Set(["math", "svg"]);
+const foreignContextElements = ["math", "svg"];
 
-const htmlIntegrationElements = new Set([
+const htmlIntegrationElements = [
     "mi",
     "mo",
     "mn",
@@ -99,9 +100,9 @@ const htmlIntegrationElements = new Set([
     "foreignobject",
     "desc",
     "title",
-]);
+];
 
-export interface ParserOptions {
+export interface ParserOptions<TParseAttributes extends boolean = true> {
     /**
      * Indicates whether special tags (`<script>`, `<style>`, and `<title>`) should get special treatment
      * and if "empty" tags (eg. `<br>`) can have children.  If `false`, the content of special tags
@@ -153,10 +154,23 @@ export interface ParserOptions {
      * Allows the default tokenizer to be overwritten.
      */
     Tokenizer?: typeof Tokenizer;
+
+    /**
+     * If set to false, attributes are not parsed into a map. This is more
+     * performant but might be inconvenient in cases where attributes are
+     * always required.
+     * Default: `true`
+     */
+    parseAttributes?: TParseAttributes;
 }
 
-export interface Handler {
-    onparserinit(parser: Parser): void;
+export interface Handler<
+    TParseAttributes extends boolean = true,
+    TAttributes = TParseAttributes extends true
+        ? Record<string, string>
+        : string
+> {
+    onparserinit(parser: Parser<TParseAttributes>): void;
 
     /**
      * Resets the handler back to starting state
@@ -170,22 +184,7 @@ export interface Handler {
     onerror(error: Error): void;
     onclosetag(name: string, isImplied: boolean): void;
     onopentagname(name: string): void;
-    /**
-     *
-     * @param name Name of the attribute
-     * @param value Value of the attribute.
-     * @param quote Quotes used around the attribute. `null` if the attribute has no quotes around the value, `undefined` if the attribute has no value.
-     */
-    onattribute(
-        name: string,
-        value: string,
-        quote?: string | undefined | null
-    ): void;
-    onopentag(
-        name: string,
-        attribs: { [s: string]: string },
-        isImplied: boolean
-    ): void;
+    onopentag(name: string, attribs: TAttributes, isImplied: boolean): void;
     ontext(data: string): void;
     oncomment(data: string): void;
     oncdatastart(): void;
@@ -196,7 +195,9 @@ export interface Handler {
 
 const reNameEnd = /\s|\//;
 
-export class Parser implements Callbacks {
+export class Parser<TParseAttributes extends boolean = true>
+    implements Callbacks
+{
     /** The start index of the last event. */
     public startIndex = 0;
     /** The end index of the last event. */
@@ -208,14 +209,12 @@ export class Parser implements Callbacks {
     private openTagStart = 0;
 
     private tagname = "";
-    private attribname = "";
-    private attribvalue = "";
-    private attribs: null | { [key: string]: string } = null;
+    private attribs = "";
     private stack: string[] = [];
     private readonly foreignContext: boolean[] = [];
-    private readonly cbs: Partial<Handler>;
+    private readonly cbs: Partial<Handler<TParseAttributes>>;
     private readonly lowerCaseTagNames: boolean;
-    private readonly lowerCaseAttributeNames: boolean;
+    private readonly parseAttributes: TParseAttributes;
     private readonly tokenizer: Tokenizer;
 
     private readonly buffers: string[] = [];
@@ -226,13 +225,13 @@ export class Parser implements Callbacks {
     private ended = false;
 
     constructor(
-        cbs?: Partial<Handler> | null,
-        private readonly options: ParserOptions = {}
+        cbs?: Partial<Handler<TParseAttributes>> | null,
+        private readonly options: ParserOptions<TParseAttributes> = {}
     ) {
         this.cbs = cbs ?? {};
         this.lowerCaseTagNames = options.lowerCaseTags ?? !options.xmlMode;
-        this.lowerCaseAttributeNames =
-            options.lowerCaseAttributeNames ?? !options.xmlMode;
+        this.parseAttributes =
+            options.parseAttributes ?? (true as TParseAttributes);
         this.tokenizer = new (options.Tokenizer ?? Tokenizer)(
             this.options,
             this
@@ -262,8 +261,12 @@ export class Parser implements Callbacks {
         this.startIndex = idx;
     }
 
+    private clearAttributes() {
+        this.attribs = "";
+    }
+
     protected isVoidElement(name: string): boolean {
-        return !this.options.xmlMode && voidElements.has(name);
+        return !this.options.xmlMode && voidElements.includes(name);
     }
 
     /** @internal */
@@ -289,7 +292,7 @@ export class Parser implements Callbacks {
         if (impliesClose) {
             while (
                 this.stack.length > 0 &&
-                impliesClose.has(this.stack[this.stack.length - 1])
+                impliesClose.includes(this.stack[this.stack.length - 1])
             ) {
                 const el = this.stack.pop()!;
                 this.cbs.onclosetag?.(el, true);
@@ -297,28 +300,50 @@ export class Parser implements Callbacks {
         }
         if (!this.isVoidElement(name)) {
             this.stack.push(name);
-            if (foreignContextElements.has(name)) {
+            if (foreignContextElements.includes(name)) {
                 this.foreignContext.push(true);
-            } else if (htmlIntegrationElements.has(name)) {
+            } else if (htmlIntegrationElements.includes(name)) {
                 this.foreignContext.push(false);
             }
         }
         this.cbs.onopentagname?.(name);
-        if (this.cbs.onopentag) this.attribs = {};
+        if (this.cbs.onopentag) this.clearAttributes();
     }
 
     private endOpenTag(isImplied: boolean) {
         this.startIndex = this.openTagStart;
 
-        if (this.attribs) {
-            this.cbs.onopentag?.(this.tagname, this.attribs, isImplied);
-            this.attribs = null;
-        }
+        this.cbs.onopentag?.(this.tagname, this.getAttributes(), isImplied);
+        this.clearAttributes();
+
         if (this.cbs.onclosetag && this.isVoidElement(this.tagname)) {
             this.cbs.onclosetag(this.tagname, true);
         }
 
         this.tagname = "";
+    }
+
+    /**
+     * @internal
+     */
+    private getAttributes(): TParseAttributes extends true
+        ? Record<string, string>
+        : string {
+        return (
+            this.parseAttributes
+                ? Attributes.toJSON(
+                      this.attribs,
+                      this.options.lowerCaseAttributeNames
+                  )
+                : this.attribs
+        ) as TParseAttributes extends true ? Record<string, string> : string;
+    }
+
+    /** @internal */
+    onattrib(start: number, endIndex: number): void {
+        this.startIndex = start;
+        this.endIndex = endIndex;
+        this.attribs += this.getSlice(start, endIndex);
     }
 
     /** @internal */
@@ -341,8 +366,8 @@ export class Parser implements Callbacks {
         }
 
         if (
-            foreignContextElements.has(name) ||
-            htmlIntegrationElements.has(name)
+            foreignContextElements.includes(name) ||
+            htmlIntegrationElements.includes(name)
         ) {
             this.foreignContext.pop();
         }
@@ -365,7 +390,7 @@ export class Parser implements Callbacks {
         } else if (!this.options.xmlMode && name === "br") {
             // We can't use `emitOpenTag` for implicit open, as `br` would be implicitly closed.
             this.cbs.onopentagname?.("br");
-            this.cbs.onopentag?.("br", {}, true);
+            this.cbs.onopentag?.("br", this.getAttributes(), true);
             this.cbs.onclosetag?.("br", false);
         }
 
@@ -401,51 +426,6 @@ export class Parser implements Callbacks {
             this.cbs.onclosetag?.(name, !isOpenImplied);
             this.stack.pop();
         }
-    }
-
-    /** @internal */
-    onattribname(start: number, endIndex: number): void {
-        this.startIndex = start;
-        const name = this.getSlice(start, endIndex);
-
-        this.attribname = this.lowerCaseAttributeNames
-            ? name.toLowerCase()
-            : name;
-    }
-
-    /** @internal */
-    onattribdata(start: number, endIndex: number): void {
-        this.attribvalue += this.getSlice(start, endIndex);
-    }
-
-    /** @internal */
-    onattribentity(cp: number): void {
-        this.attribvalue += fromCodePoint(cp);
-    }
-
-    /** @internal */
-    onattribend(quote: QuoteType, endIndex: number): void {
-        this.endIndex = endIndex;
-
-        this.cbs.onattribute?.(
-            this.attribname,
-            this.attribvalue,
-            quote === QuoteType.Double
-                ? '"'
-                : quote === QuoteType.Single
-                ? "'"
-                : quote === QuoteType.NoValue
-                ? undefined
-                : null
-        );
-
-        if (
-            this.attribs &&
-            !Object.prototype.hasOwnProperty.call(this.attribs, this.attribname)
-        ) {
-            this.attribs[this.attribname] = this.attribvalue;
-        }
-        this.attribvalue = "";
     }
 
     private getInstructionName(value: string) {
@@ -537,8 +517,6 @@ export class Parser implements Callbacks {
         this.cbs.onreset?.();
         this.tokenizer.reset();
         this.tagname = "";
-        this.attribname = "";
-        this.attribs = null;
         this.stack.length = 0;
         this.startIndex = 0;
         this.endIndex = 0;
@@ -547,6 +525,7 @@ export class Parser implements Callbacks {
         this.bufferOffset = 0;
         this.writeIndex = 0;
         this.ended = false;
+        this.clearAttributes();
     }
 
     /**

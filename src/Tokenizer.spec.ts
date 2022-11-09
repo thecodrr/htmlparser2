@@ -40,6 +40,18 @@ describe("Tokenizer", () => {
         it("for normal sitle tag", () => {
             expect(tokenize("<title></title><div></div>")).toMatchSnapshot();
         });
+        it("for normal tag with attributes", () => {
+            expect(
+                tokenize('<img src="path/to/image.jpg" width="150px" />')
+            ).toMatchSnapshot();
+        });
+        it("for normal tag with attributes 2", () => {
+            expect(
+                tokenize(
+                    " <!DOCTYPE html> <html> <title>The Title</title> <body class='foo'>Hello world <p></p></body> <!-- the comment --> </html>"
+                )
+            ).toMatchSnapshot();
+        });
     });
 
     it("should not lose data when pausing", () => {

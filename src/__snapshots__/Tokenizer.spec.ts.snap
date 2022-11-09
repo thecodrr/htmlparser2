@@ -217,3 +217,145 @@ Array [
   ],
 ]
 `;
+
+exports[`Tokenizer should support standard special tags for normal tag with attributes 1`] = `
+Array [
+  Array [
+    "onopentagname",
+    1,
+    4,
+  ],
+  Array [
+    "onattrib",
+    5,
+    43,
+  ],
+  Array [
+    "onselfclosingtag",
+    44,
+  ],
+  Array [
+    "onend",
+  ],
+]
+`;
+
+exports[`Tokenizer should support standard special tags for normal tag with attributes 2 1`] = `
+Array [
+  Array [
+    "ontext",
+    0,
+    1,
+  ],
+  Array [
+    "ondeclaration",
+    3,
+    15,
+  ],
+  Array [
+    "ontext",
+    16,
+    17,
+  ],
+  Array [
+    "onopentagname",
+    18,
+    22,
+  ],
+  Array [
+    "onopentagend",
+    22,
+  ],
+  Array [
+    "ontext",
+    23,
+    24,
+  ],
+  Array [
+    "onopentagname",
+    25,
+    30,
+  ],
+  Array [
+    "onopentagend",
+    30,
+  ],
+  Array [
+    "ontext",
+    31,
+    40,
+  ],
+  Array [
+    "onclosetag",
+    42,
+    47,
+  ],
+  Array [
+    "ontext",
+    48,
+    49,
+  ],
+  Array [
+    "onopentagname",
+    50,
+    54,
+  ],
+  Array [
+    "onattrib",
+    55,
+    65,
+  ],
+  Array [
+    "onopentagend",
+    66,
+  ],
+  Array [
+    "ontext",
+    67,
+    79,
+  ],
+  Array [
+    "onopentagname",
+    80,
+    81,
+  ],
+  Array [
+    "onopentagend",
+    81,
+  ],
+  Array [
+    "onclosetag",
+    84,
+    85,
+  ],
+  Array [
+    "onclosetag",
+    88,
+    92,
+  ],
+  Array [
+    "ontext",
+    93,
+    94,
+  ],
+  Array [
+    "oncomment",
+    98,
+    113,
+    2,
+  ],
+  Array [
+    "ontext",
+    114,
+    115,
+  ],
+  Array [
+    "onclosetag",
+    117,
+    121,
+  ],
+  Array [
+    "onend",
+  ],
+]
+`;
