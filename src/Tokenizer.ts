@@ -463,7 +463,7 @@ export default class Tokenizer {
                     this.state = State.AfterTagName;
                 }
             }
-            this.cbs.onattrib(this.sectionStart, this.index);
+            this.cbs.onattrib(this.sectionStart, this.index + 1);
             this.sectionStart = -1;
         }
     }
