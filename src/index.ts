@@ -1,6 +1,9 @@
 import { Parser, ParserOptions } from "./Parser.js";
 export { Parser, type ParserOptions };
 
+import { Attributes } from "./Attributes.js";
+export { Attributes };
+
 import {
     DomHandler,
     DomHandlerOptions,

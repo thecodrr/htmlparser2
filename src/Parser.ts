@@ -1,6 +1,6 @@
 import Tokenizer, { Callbacks } from "./Tokenizer.js";
 import { fromCodePoint } from "entities/lib/decode.js";
-import Attributes from "./Attributes.js";
+import { Attributes } from "./Attributes.js";
 
 const formTags = new Set([
     "input",

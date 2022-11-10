@@ -1,6 +1,6 @@
 import { decodeHTML5 } from "entities";
 
-export default class Attributes {
+export class Attributes {
     public static get(text: string, name: string): string | undefined {
         const start = text.indexOf(name);
         if (start === -1) return;
