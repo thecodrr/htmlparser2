@@ -2,7 +2,7 @@ import Tokenizer, { Callbacks } from "./Tokenizer.js";
 import { fromCodePoint } from "entities/lib/decode.js";
 import Attributes from "./Attributes.js";
 
-const formTags = [
+const formTags = new Set([
     "input",
     "option",
     "optgroup",
@@ -10,18 +10,18 @@ const formTags = [
     "button",
     "datalist",
     "textarea",
-];
-const pTag = ["p"];
-const tableSectionTags = ["thead", "tbody"];
-const ddtTags = ["dd", "dt"];
-const rtpTags = ["rt", "rp"];
+]);
+const pTag = new Set(["p"]);
+const tableSectionTags = new Set(["thead", "tbody"]);
+const ddtTags = new Set(["dd", "dt"]);
+const rtpTags = new Set(["rt", "rp"]);
 
-const openImpliesClose = new Map<string, string[]>([
-    ["tr", ["tr", "th", "td"]],
-    ["th", ["th"]],
-    ["td", ["thead", "th", "td"]],
-    ["body", ["head", "link", "script"]],
-    ["li", ["li"]],
+const openImpliesClose = new Map<string, Set<string>>([
+    ["tr", new Set(["tr", "th", "td"])],
+    ["th", new Set(["th"])],
+    ["td", new Set(["thead", "th", "td"])],
+    ["body", new Set(["head", "link", "script"])],
+    ["li", new Set(["li"])],
     ["p", pTag],
     ["h1", pTag],
     ["h2", pTag],
@@ -35,8 +35,8 @@ const openImpliesClose = new Map<string, string[]>([
     ["button", formTags],
     ["datalist", formTags],
     ["textarea", formTags],
-    ["option", ["option"]],
-    ["optgroup", ["optgroup", "option"]],
+    ["option", new Set(["option"])],
+    ["optgroup", new Set(["optgroup", "option"])],
     ["dd", ddtTags],
     ["dt", ddtTags],
     ["address", pTag],
@@ -66,7 +66,7 @@ const openImpliesClose = new Map<string, string[]>([
     ["tfoot", tableSectionTags],
 ]);
 
-const voidElements = [
+const voidElements = new Set([
     "area",
     "base",
     "basefont",
@@ -86,11 +86,11 @@ const voidElements = [
     "source",
     "track",
     "wbr",
-];
+]);
 
-const foreignContextElements = ["math", "svg"];
+const foreignContextElements = new Set(["math", "svg"]);
 
-const htmlIntegrationElements = [
+const htmlIntegrationElements = new Set([
     "mi",
     "mo",
     "mn",
@@ -100,7 +100,7 @@ const htmlIntegrationElements = [
     "foreignobject",
     "desc",
     "title",
-];
+]);
 
 export interface ParserOptions<TParseAttributes extends boolean = true> {
     /**
@@ -262,11 +262,12 @@ export class Parser<TParseAttributes extends boolean = true>
     }
 
     private clearAttributes() {
+        if (!this.attribs) return;
         this.attribs = "";
     }
 
     protected isVoidElement(name: string): boolean {
-        return !this.options.xmlMode && voidElements.includes(name);
+        return !this.options.xmlMode && voidElements.has(name);
     }
 
     /** @internal */
@@ -292,7 +293,7 @@ export class Parser<TParseAttributes extends boolean = true>
         if (impliesClose) {
             while (
                 this.stack.length > 0 &&
-                impliesClose.includes(this.stack[this.stack.length - 1])
+                impliesClose.has(this.stack[this.stack.length - 1])
             ) {
                 const el = this.stack.pop()!;
                 this.cbs.onclosetag?.(el, true);
@@ -300,9 +301,9 @@ export class Parser<TParseAttributes extends boolean = true>
         }
         if (!this.isVoidElement(name)) {
             this.stack.push(name);
-            if (foreignContextElements.includes(name)) {
+            if (foreignContextElements.has(name)) {
                 this.foreignContext.push(true);
-            } else if (htmlIntegrationElements.includes(name)) {
+            } else if (htmlIntegrationElements.has(name)) {
                 this.foreignContext.push(false);
             }
         }
@@ -366,8 +367,8 @@ export class Parser<TParseAttributes extends boolean = true>
         }
 
         if (
-            foreignContextElements.includes(name) ||
-            htmlIntegrationElements.includes(name)
+            foreignContextElements.has(name) ||
+            htmlIntegrationElements.has(name)
         ) {
             this.foreignContext.pop();
         }
@@ -375,13 +376,12 @@ export class Parser<TParseAttributes extends boolean = true>
         if (!this.isVoidElement(name)) {
             const pos = this.stack.lastIndexOf(name);
             if (pos !== -1) {
-                if (this.cbs.onclosetag) {
-                    let count = this.stack.length - pos;
-                    while (count--) {
-                        // We know the stack has sufficient elements.
-                        this.cbs.onclosetag(this.stack.pop()!, count !== 0);
-                    }
-                } else this.stack.length = pos;
+                let count = this.stack.length - pos;
+                while (count--) {
+                    // We know the stack has sufficient elements.
+                    const tag = this.stack.pop()!;
+                    this.cbs.onclosetag?.(tag, count !== 0);
+                }
             } else if (!this.options.xmlMode && name === "p") {
                 // Implicit open before close
                 this.emitOpenTag("p");
